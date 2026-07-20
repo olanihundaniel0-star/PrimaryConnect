@@ -28,6 +28,12 @@ public class TopicDAO {
             FROM topics
             WHERE subject_id = ? AND class_level = ? AND title = ?
             """;
+    private static final String FIND_BY_TITLE_SQL = """
+            SELECT topic_id, subject_id, class_level, title, media_path
+            FROM topics
+            WHERE title = ?
+            ORDER BY topic_id
+            """;
     private static final String FIND_BY_SUBJECT_AND_CLASS_LEVEL_SQL = """
             SELECT topic_id, subject_id, class_level, title, media_path
             FROM topics
@@ -87,6 +93,21 @@ public class TopicDAO {
                             + ", title " + title + ".",
                     exception
             );
+        }
+    }
+
+    public Topic findByTitle(String title) {
+        try (PreparedStatement statement = getConnection().prepareStatement(FIND_BY_TITLE_SQL)) {
+            statement.setString(1, title);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return mapTopic(resultSet);
+                }
+                return null;
+            }
+        } catch (SQLException exception) {
+            throw new RuntimeException("Failed to find topic by title " + title + ".", exception);
         }
     }
 
