@@ -10,16 +10,29 @@ import com.primaryconnect.model.Exercise;
 import com.primaryconnect.model.Pupil;
 import com.primaryconnect.model.Topic;
 
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.StringReader;
+import java.net.JarURLConnection;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 
 /**
  * Loads bundled CSV seed data into the database.
@@ -28,16 +41,28 @@ public final class SeedLoader {
     private static final Logger LOGGER = Logger.getLogger(SeedLoader.class.getName());
 
     private static final String PUPILS_SEED = "seed/pupils_seed.csv";
-    private static final String CURRICULUM_SEED = "seed/curriculum_seed.csv";
+    private static final String CURRICULUM_SEED_DIRECTORY = "seed/curriculum";
     private static final String EXERCISES_SEED = "seed/exercises_seed.csv";
     private static final String SAMPLE_RECORDS_SEED = "seed/sample_records_seed.csv";
+    private static final List<String> CURRICULUM_HEADERS = List.of(
+            "class",
+            "subject",
+            "term",
+            "week",
+            "topic",
+            "learningObjectives",
+            "contents",
+            "teacherActivities",
+            "learnerActivities",
+            "teachingMaterials",
+            "assessment"
+    );
 
     private SeedLoader() {
     }
 
     public static void loadAll() {
-        // Most seed files are currently header-only placeholders waiting on content team data,
-        // so an empty or near-empty load result right now is expected.
+        // Some non-curriculum seed files are header-only placeholders waiting on content team data.
         PupilDAO pupilDAO = new PupilDAO();
         SubjectDAO subjectDAO = new SubjectDAO();
         TopicDAO topicDAO = new TopicDAO();
@@ -67,40 +92,103 @@ public final class SeedLoader {
             TopicDAO topicDAO,
             Map<String, TopicLookup> loadedTopicsByTitle
     ) {
-        readSeedRows(CURRICULUM_SEED, row -> {
-            if (row.length < 12) {
-                warnSkippingRow(
-                        CURRICULUM_SEED,
-                        row,
-                        "expected columns: subject,class_level,term,week,topic,media_path,learning_objectives,contents,teacher_activities,learner_activities,teaching_materials,assessment"
-                );
+        for (String resourceName : findCurriculumSeedResources()) {
+            loadCurriculumFile(resourceName, subjectDAO, topicDAO, loadedTopicsByTitle);
+        }
+    }
+
+    private static void loadCurriculumFile(
+            String resourceName,
+            SubjectDAO subjectDAO,
+            TopicDAO topicDAO,
+            Map<String, TopicLookup> loadedTopicsByTitle
+    ) {
+        ClassLoader classLoader = SeedLoader.class.getClassLoader();
+
+        try (InputStream inputStream = classLoader.getResourceAsStream(resourceName)) {
+            if (inputStream == null) {
+                LOGGER.warning("Curriculum seed file was not found: " + resourceName + ". Continuing with next seed file.");
                 return;
             }
 
-            Integer week = parseOptionalInteger(row[3], CURRICULUM_SEED, row, "week");
-            if (week == null && !row[3].isBlank()) {
-                return;
+            String csvContent = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            if (csvContent.startsWith("\uFEFF")) {
+                csvContent = csvContent.substring(1);
             }
 
-            int subjectId = subjectDAO.findOrCreateByName(row[0]);
-            Topic topic = new Topic(
-                    0,
-                    subjectId,
-                    row[1],
-                    row[4],
-                    row[2],
-                    week,
-                    row[6],
-                    row[7],
-                    row[8],
-                    row[9],
-                    row[10],
-                    row[11],
-                    row[5]
-            );
-            topicDAO.create(topic);
-            loadedTopicsByTitle.put(row[4], new TopicLookup(subjectId, row[1], row[2]));
-        });
+            try (
+                    StringReader reader = new StringReader(csvContent);
+                    CSVParser parser = CSVFormat.DEFAULT.builder()
+                            .setHeader()
+                            .setSkipHeaderRecord(true)
+                            .setIgnoreEmptyLines(true)
+                            .setTrim(true)
+                            .get()
+                            .parse(reader)
+            ) {
+                if (!hasExpectedCurriculumHeaders(parser)) {
+                    LOGGER.warning("Skipping curriculum seed file " + resourceName
+                            + " because it does not contain the expected headers: "
+                            + String.join(",", CURRICULUM_HEADERS) + ".");
+                    return;
+                }
+
+                for (CSVRecord record : parser) {
+                    loadCurriculumRecord(resourceName, record, subjectDAO, topicDAO, loadedTopicsByTitle);
+                }
+            }
+        } catch (IOException exception) {
+            LOGGER.warning("Failed to read curriculum seed file " + resourceName + ": "
+                    + exception.getMessage() + ". Continuing with next seed file.");
+        }
+    }
+
+    private static void loadCurriculumRecord(
+            String resourceName,
+            CSVRecord record,
+            SubjectDAO subjectDAO,
+            TopicDAO topicDAO,
+            Map<String, TopicLookup> loadedTopicsByTitle
+    ) {
+        String classLevel = record.get("class");
+        String subject = record.get("subject");
+        String term = record.get("term");
+        String title = record.get("topic");
+
+        if (classLevel.isBlank() || subject.isBlank() || term.isBlank() || title.isBlank()) {
+            warnSkippingCurriculumRecord(resourceName, record, "class, subject, term, and topic are required");
+            return;
+        }
+
+        Integer week = parseOptionalWeek(resourceName, record);
+        if (week == null && !record.get("week").isBlank()) {
+            return;
+        }
+
+        int subjectId = subjectDAO.findOrCreateByName(subject);
+        Topic existingTopic = topicDAO.findBySubjectClassLevelTermTitle(subjectId, classLevel, term, title);
+        if (existingTopic != null) {
+            loadedTopicsByTitle.put(title, new TopicLookup(subjectId, classLevel, term));
+            return;
+        }
+
+        Topic topic = new Topic(
+                0,
+                subjectId,
+                classLevel,
+                title,
+                term,
+                week,
+                record.get("learningObjectives"),
+                record.get("contents"),
+                record.get("teacherActivities"),
+                record.get("learnerActivities"),
+                record.get("teachingMaterials"),
+                record.get("assessment"),
+                null
+        );
+        topicDAO.create(topic);
+        loadedTopicsByTitle.put(title, new TopicLookup(subjectId, classLevel, term));
     }
 
     private static void loadExercises(
@@ -218,7 +306,63 @@ public final class SeedLoader {
         LOGGER.warning("Skipping seed row in " + resourceName + " because " + reason + ": " + String.join(",", row) + ".");
     }
 
-    private static Integer parseOptionalInteger(String value, String resourceName, String[] row, String columnName) {
+    private static List<String> findCurriculumSeedResources() {
+        ClassLoader classLoader = SeedLoader.class.getClassLoader();
+        URL directoryUrl = classLoader.getResource(CURRICULUM_SEED_DIRECTORY);
+
+        if (directoryUrl == null) {
+            LOGGER.warning("Curriculum seed directory was not found: " + CURRICULUM_SEED_DIRECTORY + ". Continuing without curriculum seeds.");
+            return List.of();
+        }
+
+        try {
+            if ("jar".equals(directoryUrl.getProtocol())) {
+                return findCurriculumSeedResourcesInJar(directoryUrl);
+            }
+
+            Path directoryPath = Path.of(directoryUrl.toURI());
+            try (Stream<Path> stream = Files.list(directoryPath)) {
+                return stream
+                        .filter(Files::isRegularFile)
+                        .map(Path::getFileName)
+                        .map(Path::toString)
+                        .filter(SeedLoader::isCsvFile)
+                        .sorted()
+                        .map(fileName -> CURRICULUM_SEED_DIRECTORY + "/" + fileName)
+                        .toList();
+            }
+        } catch (IOException | URISyntaxException exception) {
+            LOGGER.warning("Failed to scan curriculum seed directory " + CURRICULUM_SEED_DIRECTORY + ": "
+                    + exception.getMessage() + ". Continuing without curriculum seeds.");
+            return List.of();
+        }
+    }
+
+    private static List<String> findCurriculumSeedResourcesInJar(URL directoryUrl) throws IOException {
+        JarURLConnection jarConnection = (JarURLConnection) directoryUrl.openConnection();
+        List<String> resourceNames = new ArrayList<>();
+
+        jarConnection.getJarFile().stream()
+                .filter(entry -> !entry.isDirectory())
+                .map(entry -> entry.getName())
+                .filter(name -> name.startsWith(CURRICULUM_SEED_DIRECTORY + "/"))
+                .filter(SeedLoader::isCsvFile)
+                .sorted()
+                .forEach(resourceNames::add);
+
+        return resourceNames;
+    }
+
+    private static boolean isCsvFile(String fileName) {
+        return fileName.toLowerCase().endsWith(".csv");
+    }
+
+    private static boolean hasExpectedCurriculumHeaders(CSVParser parser) {
+        return parser.getHeaderNames().equals(CURRICULUM_HEADERS);
+    }
+
+    private static Integer parseOptionalWeek(String resourceName, CSVRecord record) {
+        String value = record.get("week");
         if (value.isBlank()) {
             return null;
         }
@@ -226,9 +370,14 @@ public final class SeedLoader {
         try {
             return Integer.parseInt(value);
         } catch (NumberFormatException exception) {
-            warnSkippingRow(resourceName, row, columnName + " is not a valid integer");
+            warnSkippingCurriculumRecord(resourceName, record, "week is not a valid integer");
             return null;
         }
+    }
+
+    private static void warnSkippingCurriculumRecord(String resourceName, CSVRecord record, String reason) {
+        LOGGER.warning("Skipping curriculum seed row " + record.getRecordNumber() + " in "
+                + resourceName + " because " + reason + ".");
     }
 
     @FunctionalInterface
