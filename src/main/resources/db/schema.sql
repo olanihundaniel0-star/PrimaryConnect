@@ -36,7 +36,16 @@ CREATE TABLE topics (
     subject_id INTEGER NOT NULL,
     class_level TEXT NOT NULL,
     title TEXT NOT NULL,
+    term TEXT NOT NULL,
+    week INTEGER,
+    learning_objectives TEXT,
+    contents TEXT,
+    teacher_activities TEXT,
+    learner_activities TEXT,
+    teaching_materials TEXT,
+    assessment TEXT,
     media_path TEXT,
+    UNIQUE (subject_id, class_level, term, title),
     FOREIGN KEY (subject_id) REFERENCES subjects(subject_id)
 );
 

@@ -68,15 +68,38 @@ public final class SeedLoader {
             Map<String, TopicLookup> loadedTopicsByTitle
     ) {
         readSeedRows(CURRICULUM_SEED, row -> {
-            if (row.length < 4) {
-                warnSkippingRow(CURRICULUM_SEED, row, "expected columns: subject,class_level,topic,media_path");
+            if (row.length < 12) {
+                warnSkippingRow(
+                        CURRICULUM_SEED,
+                        row,
+                        "expected columns: subject,class_level,term,week,topic,media_path,learning_objectives,contents,teacher_activities,learner_activities,teaching_materials,assessment"
+                );
+                return;
+            }
+
+            Integer week = parseOptionalInteger(row[3], CURRICULUM_SEED, row, "week");
+            if (week == null && !row[3].isBlank()) {
                 return;
             }
 
             int subjectId = subjectDAO.findOrCreateByName(row[0]);
-            Topic topic = new Topic(0, subjectId, row[1], row[2], row[3]);
+            Topic topic = new Topic(
+                    0,
+                    subjectId,
+                    row[1],
+                    row[4],
+                    row[2],
+                    week,
+                    row[6],
+                    row[7],
+                    row[8],
+                    row[9],
+                    row[10],
+                    row[11],
+                    row[5]
+            );
             topicDAO.create(topic);
-            loadedTopicsByTitle.put(row[2], new TopicLookup(subjectId, row[1]));
+            loadedTopicsByTitle.put(row[4], new TopicLookup(subjectId, row[1], row[2]));
         });
     }
 
@@ -136,7 +159,12 @@ public final class SeedLoader {
 
     private static Topic findExerciseTopic(TopicDAO topicDAO, String title, TopicLookup topicLookup) {
         if (topicLookup != null) {
-            Topic topic = topicDAO.findBySubjectClassLevelTitle(topicLookup.subjectId(), topicLookup.classLevel(), title);
+            Topic topic = topicDAO.findBySubjectClassLevelTermTitle(
+                    topicLookup.subjectId(),
+                    topicLookup.classLevel(),
+                    topicLookup.term(),
+                    title
+            );
             if (topic != null) {
                 return topic;
             }
@@ -190,11 +218,24 @@ public final class SeedLoader {
         LOGGER.warning("Skipping seed row in " + resourceName + " because " + reason + ": " + String.join(",", row) + ".");
     }
 
+    private static Integer parseOptionalInteger(String value, String resourceName, String[] row, String columnName) {
+        if (value.isBlank()) {
+            return null;
+        }
+
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException exception) {
+            warnSkippingRow(resourceName, row, columnName + " is not a valid integer");
+            return null;
+        }
+    }
+
     @FunctionalInterface
     private interface SeedRowConsumer {
         void accept(String[] row);
     }
 
-    private record TopicLookup(int subjectId, String classLevel) {
+    private record TopicLookup(int subjectId, String classLevel, String term) {
     }
 }
