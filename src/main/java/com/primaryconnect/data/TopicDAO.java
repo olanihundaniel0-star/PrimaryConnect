@@ -14,32 +14,39 @@ import java.util.List;
  * Provides data access operations for topic records.
  */
 public class TopicDAO {
+    private static final String TOPIC_COLUMNS = """
+            topic_id, subject_id, class_level, title, term, week, learning_objectives, contents,
+            teacher_activities, learner_activities, teaching_materials, assessment, media_path
+            """;
     private static final String INSERT_SQL = """
-            INSERT INTO topics (subject_id, class_level, title, media_path)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO topics (
+                subject_id, class_level, title, term, week, learning_objectives, contents,
+                teacher_activities, learner_activities, teaching_materials, assessment, media_path
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String FIND_BY_ID_SQL = """
-            SELECT topic_id, subject_id, class_level, title, media_path
+            SELECT %s
             FROM topics
             WHERE topic_id = ?
-            """;
-    private static final String FIND_BY_SUBJECT_CLASS_LEVEL_TITLE_SQL = """
-            SELECT topic_id, subject_id, class_level, title, media_path
+            """.formatted(TOPIC_COLUMNS);
+    private static final String FIND_BY_SUBJECT_CLASS_LEVEL_TERM_TITLE_SQL = """
+            SELECT %s
             FROM topics
-            WHERE subject_id = ? AND class_level = ? AND title = ?
-            """;
+            WHERE subject_id = ? AND class_level = ? AND term = ? AND title = ?
+            """.formatted(TOPIC_COLUMNS);
     private static final String FIND_BY_TITLE_SQL = """
-            SELECT topic_id, subject_id, class_level, title, media_path
+            SELECT %s
             FROM topics
             WHERE title = ?
             ORDER BY topic_id
-            """;
-    private static final String FIND_BY_SUBJECT_AND_CLASS_LEVEL_SQL = """
-            SELECT topic_id, subject_id, class_level, title, media_path
+            """.formatted(TOPIC_COLUMNS);
+    private static final String FIND_BY_SUBJECT_CLASS_LEVEL_TERM_SQL = """
+            SELECT %s
             FROM topics
-            WHERE subject_id = ? AND class_level = ?
-            ORDER BY title, topic_id
-            """;
+            WHERE subject_id = ? AND class_level = ? AND term = ?
+            ORDER BY week, title, topic_id
+            """.formatted(TOPIC_COLUMNS);
 
     public TopicDAO() {
     }
@@ -49,7 +56,15 @@ public class TopicDAO {
             statement.setInt(1, topic.getSubjectId());
             statement.setString(2, topic.getClassLevel());
             statement.setString(3, topic.getTitle());
-            statement.setString(4, topic.getMediaPath());
+            statement.setString(4, topic.getTerm());
+            setNullableInteger(statement, 5, topic.getWeek());
+            statement.setString(6, topic.getLearningObjectives());
+            statement.setString(7, topic.getContents());
+            statement.setString(8, topic.getTeacherActivities());
+            statement.setString(9, topic.getLearnerActivities());
+            statement.setString(10, topic.getTeachingMaterials());
+            statement.setString(11, topic.getAssessment());
+            statement.setString(12, topic.getMediaPath());
             statement.executeUpdate();
 
             int topicId = readGeneratedId(statement, "create topic");
@@ -75,11 +90,12 @@ public class TopicDAO {
         }
     }
 
-    public Topic findBySubjectClassLevelTitle(int subjectId, String classLevel, String title) {
-        try (PreparedStatement statement = getConnection().prepareStatement(FIND_BY_SUBJECT_CLASS_LEVEL_TITLE_SQL)) {
+    public Topic findBySubjectClassLevelTermTitle(int subjectId, String classLevel, String term, String title) {
+        try (PreparedStatement statement = getConnection().prepareStatement(FIND_BY_SUBJECT_CLASS_LEVEL_TERM_TITLE_SQL)) {
             statement.setInt(1, subjectId);
             statement.setString(2, classLevel);
-            statement.setString(3, title);
+            statement.setString(3, term);
+            statement.setString(4, title);
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
@@ -90,7 +106,7 @@ public class TopicDAO {
         } catch (SQLException exception) {
             throw new RuntimeException(
                     "Failed to find topic for subject ID " + subjectId + ", class level " + classLevel
-                            + ", title " + title + ".",
+                            + ", term " + term + ", title " + title + ".",
                     exception
             );
         }
@@ -111,12 +127,13 @@ public class TopicDAO {
         }
     }
 
-    public List<Topic> findBySubjectAndClassLevel(int subjectId, String classLevel) {
+    public List<Topic> findBySubjectClassLevelTerm(int subjectId, String classLevel, String term) {
         List<Topic> topics = new ArrayList<>();
 
-        try (PreparedStatement statement = getConnection().prepareStatement(FIND_BY_SUBJECT_AND_CLASS_LEVEL_SQL)) {
+        try (PreparedStatement statement = getConnection().prepareStatement(FIND_BY_SUBJECT_CLASS_LEVEL_TERM_SQL)) {
             statement.setInt(1, subjectId);
             statement.setString(2, classLevel);
+            statement.setString(3, term);
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
@@ -126,7 +143,8 @@ public class TopicDAO {
             return topics;
         } catch (SQLException exception) {
             throw new RuntimeException(
-                    "Failed to find topics for subject ID " + subjectId + " and class level " + classLevel + ".",
+                    "Failed to find topics for subject ID " + subjectId + ", class level " + classLevel
+                            + ", and term " + term + ".",
                     exception
             );
         }
@@ -145,12 +163,30 @@ public class TopicDAO {
         throw new RuntimeException("Failed to " + operation + ": no generated ID returned.");
     }
 
+    private void setNullableInteger(PreparedStatement statement, int parameterIndex, Integer value) throws SQLException {
+        if (value == null) {
+            statement.setNull(parameterIndex, java.sql.Types.INTEGER);
+            return;
+        }
+        statement.setInt(parameterIndex, value);
+    }
+
     private Topic mapTopic(ResultSet resultSet) throws SQLException {
+        int week = resultSet.getInt("week");
+        boolean weekWasNull = resultSet.wasNull();
         return new Topic(
                 resultSet.getInt("topic_id"),
                 resultSet.getInt("subject_id"),
                 resultSet.getString("class_level"),
                 resultSet.getString("title"),
+                resultSet.getString("term"),
+                weekWasNull ? null : week,
+                resultSet.getString("learning_objectives"),
+                resultSet.getString("contents"),
+                resultSet.getString("teacher_activities"),
+                resultSet.getString("learner_activities"),
+                resultSet.getString("teaching_materials"),
+                resultSet.getString("assessment"),
                 resultSet.getString("media_path")
         );
     }
