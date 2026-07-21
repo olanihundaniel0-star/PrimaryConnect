@@ -27,10 +27,10 @@ public class GradingEngine {
     }
 
     public void rankClass(List<Score> scores) {
-        scores.sort((a, b) -> Double.compare(b.getTotalScore(), a.getTotalScore()));
+        scores.sort((a, b) -> Double.compare(b.getFinalScore(), a.getFinalScore()));
 
         for (int i = 0; i < scores.size(); i++) {
-            if (i > 0 && scores.get(i).getTotalScore() == scores.get(i - 1).getTotalScore()) {
+            if (i > 0 && scores.get(i).getFinalScore() == scores.get(i - 1).getFinalScore()) {
                 scores.get(i).setRank(scores.get(i - 1).getRank());
             } else {
                 scores.get(i).setRank(i + 1);
@@ -51,7 +51,7 @@ public class GradingEngine {
             if (s.getPupilId() == pupilId && s.getTerm().equals(term) && s.getSession().equals(session)) {
                 report.append(String.format("%-10d %-6.1f %-6.1f %-6.1f %-6s %-6d\n",
                     s.getSubjectId(), s.getTestScore(), s.getExamScore(),
-                    s.getTotalScore(), s.getGrade(), s.getRank()));
+                    s.getFinalScore(), s.getGrade(), s.getRank()));
             }
         }
 
@@ -71,10 +71,10 @@ public class GradingEngine {
             if (s.getTerm().equals(term) && s.getSession().equals(session)) {
                 report.append(String.format("%-10d %-10d %-6.1f %-6s %-6d\n",
                     s.getPupilId(), s.getSubjectId(),
-                    s.getTotalScore(), s.getGrade(), s.getRank()));
+                    s.getFinalScore(), s.getGrade(), s.getRank()));
             }
-
         }
+
         return report.toString();
     }
 }
