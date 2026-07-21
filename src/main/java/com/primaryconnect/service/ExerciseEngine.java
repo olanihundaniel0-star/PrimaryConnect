@@ -1,44 +1,23 @@
 package com.primaryconnect.service;
 
+import com.primaryconnect.data.ExerciseDAO;
 import com.primaryconnect.model.Exercise;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
-/**
- * Handles serving exercise questions to a pupil, checking their answers,
- * and giving instant feedback.
- *
- * Adapted to match the Exercise model as defined on feature/db-setup:
- * exerciseId, topicId, type, questionText, options (single delimited string), correctAnswer.
- *
- * Branch: feature/exercise-grading
- * Owner: Nkpogone Barile Michael
- */
 public class ExerciseEngine {
 
-    private final List<Exercise> hardcodedExercises;
+    private final ExerciseDAO exerciseDAO;
     private final Scanner scanner;
 
     public ExerciseEngine() {
-        this.hardcodedExercises = buildSampleData();
+        this.exerciseDAO = new ExerciseDAO();
         this.scanner = new Scanner(System.in);
     }
 
-    /**
-     * Returns a list of exercises filtered by topic.
-     * (subjectId/classLevel filtering removed — those fields no longer
-     * exist on the Exercise model from feature/db-setup.)
-     */
     public List<Exercise> loadExercises(int topicId) {
-        List<Exercise> results = new ArrayList<>();
-        for (Exercise ex : hardcodedExercises) {
-            if (ex.getTopicId() == topicId) {
-                results.add(ex);
-            }
-        }
-        return results;
+        return exerciseDAO.findByTopic(topicId);
     }
 
     public void presentQuestion(Exercise exercise) {
@@ -95,37 +74,5 @@ public class ExerciseEngine {
 
         System.out.println("Session complete: " + correctCount + "/" + exercises.size() + " correct.");
         return correctCount;
-    }
-
-    private List<Exercise> buildSampleData() {
-        List<Exercise> data = new ArrayList<>();
-
-        // MCQ sample — options stored as one comma-separated string
-        data.add(new Exercise(
-                1, 1,
-                "MCQ",
-                "What is 5 + 3?",
-                "6,7,8,9",
-                "C"
-        ));
-
-        // Fill-in-the-blank sample
-        data.add(new Exercise(
-                2, 2,
-                "FILL_IN_BLANK",
-                "The capital of Nigeria is _______.",
-                null,
-                "Abuja"
-        ));
-
-        data.add(new Exercise(
-                3, 1,
-                "MCQ",
-                "What is 10 - 4?",
-                "5,6,7,8",
-                "B"
-        ));
-
-        return data;
     }
 }
