@@ -87,7 +87,14 @@ All pull requests require review before merging.
 ## Team
 
 Group 11
-
-- Femi
-- obimz
-- Add the rest of the team here
+Osemwegie Fortunatus Oseahuwen
+Balogun Aisha Abiodun
+Abdul-raheem Ahmad Oluwapelumi
+Mayowa Daniel Tomisin
+Omololu Tofunmi
+Nkpogone Barile Michael
+Olabamiji Muhammad Fathii
+Obimba Samuel
+Olanihun Daniel Oluwanifemi
+Aluko Ifeoluwa Deborah
+Benjamin Oluwatobiloba Benjamin
