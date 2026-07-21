@@ -8,12 +8,10 @@ public class GradingEngine {
 
     public double computeTotal(double testScore, double examScore) {
         if (testScore < 0 || testScore > 40) {
-            System.out.println("Invalid test score. Must be between 0 and 40.");
-            return -1;
+            throw new IllegalArgumentException("Invalid test score. Must be between 0 and 40.");
         }
         if (examScore < 0 || examScore > 60) {
-            System.out.println("Invalid exam score. Must be between 0 and 60.");
-            return -1;
+            throw new IllegalArgumentException("Invalid exam score. Must be between 0 and 60.");
         }
         return testScore + examScore;
     }
@@ -23,6 +21,7 @@ public class GradingEngine {
         if (totalScore >= 60) return "B";
         if (totalScore >= 50) return "C";
         if (totalScore >= 40) return "D";
+        if (totalScore >= 30) return "E";
         return "F";
     }
 
