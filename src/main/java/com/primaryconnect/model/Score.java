@@ -13,6 +13,7 @@ public class Score {
     private double examScore;
     private double finalScore;
     private String grade;
+    private int rank;
 
     public Score() {
     }
@@ -109,5 +110,13 @@ public class Score {
 
     public void setGrade(String grade) {
         this.grade = grade;
+    }
+
+    public int getRank() {
+        return rank;
+    }
+
+    public void setRank(int rank) {
+        this.rank = rank;
     }
 }
