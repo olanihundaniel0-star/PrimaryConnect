@@ -6,6 +6,21 @@ import java.util.List;
 
 public class GradingEngine {
 
+    /**
+     * Computes the final total score from test and exam components.
+     * <p>
+     * This method assumes that both input scores are already pre-scaled to their
+     * respective weightings: testScore must be in the range 0–40 (40% weight),
+     * and examScore must be in the range 0–60 (60% weight). The plain sum of
+     * these pre-scaled values produces the correct 40/60-weighted final score
+     * out of 100.
+     * </p>
+     *
+     * @param testScore the test score, pre-scaled to 0–40 range
+     * @param examScore the exam score, pre-scaled to 0–60 range
+     * @return the final total score out of 100
+     * @throws IllegalArgumentException if testScore is not in [0, 40] or examScore is not in [0, 60]
+     */
     public double computeTotal(double testScore, double examScore) {
         if (testScore < 0 || testScore > 40) {
             throw new IllegalArgumentException("Invalid test score. Must be between 0 and 40.");
