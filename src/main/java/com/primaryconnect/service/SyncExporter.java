@@ -1,119 +1,97 @@
 package com.primaryconnect.service;
 
-import com.primaryconnect.data.DatabaseManager;
+import com.primaryconnect.data.AttendanceDAO;
+import com.primaryconnect.data.ScoreDAO;
+import com.primaryconnect.data.SyncLogDAO;
 import com.primaryconnect.model.AttendanceRecord;
 import com.primaryconnect.model.Score;
 
 import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.time.LocalDate;
-import java.util.ArrayList;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
- * Exports local records to a file on a removable USB device for offline transfer to another laptop.
+ * Exports attendance and score data to CSV files for synchronization purposes.
  */
 public class SyncExporter {
+    private final AttendanceDAO attendanceDAO;
+    private final ScoreDAO scoreDAO;
+    private final SyncLogDAO syncLogDAO;
+
     public SyncExporter() {
+        this.attendanceDAO = new AttendanceDAO();
+        this.scoreDAO = new ScoreDAO();
+        this.syncLogDAO = new SyncLogDAO();
     }
 
     public void export(String exportPath) {
-        Path exportDirectory = Path.of(exportPath);
+        String deviceId;
         try {
-            Files.createDirectories(exportDirectory);
+            deviceId = InetAddress.getLocalHost().getHostName();
+        } catch (UnknownHostException exception) {
+            deviceId = "unknown-device";
+        }
 
-            List<AttendanceRecord> attendanceRecords = loadAttendanceRecords();
-            List<Score> scores = loadScores();
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
 
-            writeAttendanceFile(exportDirectory.resolve("attendance_export.csv"), attendanceRecords);
-            writeScoresFile(exportDirectory.resolve("scores_export.csv"), scores);
+        try {
+            List<AttendanceRecord> attendanceRecords = attendanceDAO.findAll();
+            List<Score> scores = scoreDAO.findAll();
 
-            System.out.println("Exported " + attendanceRecords.size() + " attendance records and "
-                    + scores.size() + " score records to " + exportDirectory.toAbsolutePath() + ".");
-        } catch (IOException | SQLException exception) {
-            throw new RuntimeException("Export failed for path " + exportPath + ".", exception);
+            exportAttendance(exportPath, attendanceRecords);
+            exportScores(exportPath, scores);
+
+            int totalRecords = attendanceRecords.size() + scores.size();
+            syncLogDAO.create(deviceId, timestamp, totalRecords, "SUCCESS");
+
+        } catch (Exception exception) {
+            syncLogDAO.create(deviceId, timestamp, 0, "FAILED");
+            throw new RuntimeException("Export failed.", exception);
         }
     }
 
-    private List<AttendanceRecord> loadAttendanceRecords() throws SQLException {
-        List<AttendanceRecord> records = new ArrayList<>();
-        String sql = """
-                SELECT attendance_id, pupil_id, date, status
-                FROM attendance
-                ORDER BY attendance_id
-                """;
+    private void exportAttendance(String exportPath, List<AttendanceRecord> records) throws IOException {
+        Path filePath = Path.of(exportPath, "attendance_export.csv");
 
-        Connection connection = DatabaseManager.getInstance().getConnection();
-        try (Statement statement = connection.createStatement();
-             ResultSet resultSet = statement.executeQuery(sql)) {
-            while (resultSet.next()) {
-                records.add(new AttendanceRecord(
-                        resultSet.getInt("attendance_id"),
-                        resultSet.getInt("pupil_id"),
-                        LocalDate.parse(resultSet.getString("date")),
-                        resultSet.getString("status")
-                ));
-            }
-        }
-
-        return records;
-    }
-
-    private List<Score> loadScores() throws SQLException {
-        List<Score> scores = new ArrayList<>();
-        String sql = """
-                SELECT score_id, pupil_id, subject_id, session, term, test_score, exam_score, final_score, grade
-                FROM scores
-                ORDER BY score_id
-                """;
-
-        Connection connection = DatabaseManager.getInstance().getConnection();
-        try (Statement statement = connection.createStatement();
-             ResultSet resultSet = statement.executeQuery(sql)) {
-            while (resultSet.next()) {
-                scores.add(new Score(
-                        resultSet.getInt("score_id"),
-                        resultSet.getInt("pupil_id"),
-                        resultSet.getInt("subject_id"),
-                        resultSet.getString("session"),
-                        resultSet.getString("term"),
-                        resultSet.getDouble("test_score"),
-                        resultSet.getDouble("exam_score"),
-                        resultSet.getDouble("final_score"),
-                        resultSet.getString("grade")
-                ));
-            }
-        }
-
-        return scores;
-    }
-
-    private void writeAttendanceFile(Path filePath, List<AttendanceRecord> records) throws IOException {
-        try (BufferedWriter writer = Files.newBufferedWriter(filePath, StandardCharsets.UTF_8)) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath.toFile()))) {
             writer.write("attendance_id,pupil_id,date,status");
             writer.newLine();
+
             for (AttendanceRecord record : records) {
-                writer.write(record.getAttendanceId() + "," + record.getPupilId() + "," + record.getDate() + "," + record.getStatus());
+                writer.write(String.format("%d,%d,%s,%s",
+                        record.getAttendanceId(),
+                        record.getPupilId(),
+                        record.getDate(),
+                        record.getStatus()));
                 writer.newLine();
             }
         }
     }
 
-    private void writeScoresFile(Path filePath, List<Score> scores) throws IOException {
-        try (BufferedWriter writer = Files.newBufferedWriter(filePath, StandardCharsets.UTF_8)) {
+    private void exportScores(String exportPath, List<Score> scores) throws IOException {
+        Path filePath = Path.of(exportPath, "scores_export.csv");
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath.toFile()))) {
             writer.write("score_id,pupil_id,subject_id,session,term,test_score,exam_score,final_score,grade");
             writer.newLine();
+
             for (Score score : scores) {
-                writer.write(score.getScoreId() + "," + score.getPupilId() + "," + score.getSubjectId() + ","
-                        + score.getSession() + "," + score.getTerm() + "," + score.getTestScore() + ","
-                        + score.getExamScore() + "," + score.getFinalScore() + "," + score.getGrade());
+                writer.write(String.format("%d,%d,%d,%s,%s,%.2f,%.2f,%.2f,%s",
+                        score.getScoreId(),
+                        score.getPupilId(),
+                        score.getSubjectId(),
+                        score.getSession(),
+                        score.getTerm(),
+                        score.getTestScore(),
+                        score.getExamScore(),
+                        score.getFinalScore(),
+                        score.getGrade()));
                 writer.newLine();
             }
         }

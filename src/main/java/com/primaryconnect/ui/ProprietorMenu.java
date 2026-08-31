@@ -166,10 +166,8 @@ public class ProprietorMenu {
         try {
             if (mode.startsWith("E")) {
                 syncExporter.export(path);
-                System.out.println("Export completed for " + path + ".");
             } else if (mode.startsWith("I")) {
                 syncImporter.importFrom(path);
-                System.out.println("Import completed from " + path + ".");
             } else {
                 System.out.println("Unrecognized sync option. Use E for export or I for import.");
             }

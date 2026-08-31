@@ -38,6 +38,11 @@ public class ScoreDAO {
             DELETE FROM scores
             WHERE score_id = ?
             """;
+    private static final String FIND_ALL_SQL = """
+            SELECT score_id, pupil_id, subject_id, session, term, test_score, exam_score, final_score, grade
+            FROM scores
+            ORDER BY session, term, pupil_id, subject_id
+            """;
 
     public ScoreDAO() {
     }
@@ -124,6 +129,20 @@ public class ScoreDAO {
             statement.executeUpdate();
         } catch (SQLException exception) {
             throw new RuntimeException("Failed to delete score with ID " + scoreId + ".", exception);
+        }
+    }
+
+    public List<Score> findAll() {
+        List<Score> scores = new ArrayList<>();
+
+        try (PreparedStatement statement = getConnection().prepareStatement(FIND_ALL_SQL);
+             ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                scores.add(mapScore(resultSet));
+            }
+            return scores;
+        } catch (SQLException exception) {
+            throw new RuntimeException("Failed to retrieve all scores.", exception);
         }
     }
 

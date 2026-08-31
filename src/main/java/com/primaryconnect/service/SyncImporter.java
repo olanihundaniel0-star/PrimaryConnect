@@ -2,72 +2,94 @@ package com.primaryconnect.service;
 
 import com.primaryconnect.data.AttendanceDAO;
 import com.primaryconnect.data.ScoreDAO;
+import com.primaryconnect.data.SyncLogDAO;
 import com.primaryconnect.model.AttendanceRecord;
 import com.primaryconnect.model.Score;
 
 import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
- * Imports records from a USB export, merging new data while rejecting duplicate records by composite key.
+ * Imports attendance and score data from CSV files for synchronization purposes.
+ * 
+ * Limitations:
+ * 1. Pupils are not synced - pupil records are assumed to be already consistent across devices.
+ * 2. Duplicate handling uses skip-if-exists logic, not true last-write-wins, since neither
+ *    the attendance nor scores table tracks a last-modified timestamp.
  */
 public class SyncImporter {
     private final AttendanceDAO attendanceDAO;
     private final ScoreDAO scoreDAO;
+    private final SyncLogDAO syncLogDAO;
 
     public SyncImporter() {
         this.attendanceDAO = new AttendanceDAO();
         this.scoreDAO = new ScoreDAO();
+        this.syncLogDAO = new SyncLogDAO();
     }
 
     public void importFrom(String importPath) {
-        Path directory = Path.of(importPath);
-        Path attendanceFile = directory.resolve("attendance_export.csv");
-        Path scoresFile = directory.resolve("scores_export.csv");
+        String deviceId;
+        try {
+            deviceId = InetAddress.getLocalHost().getHostName();
+        } catch (UnknownHostException exception) {
+            deviceId = "unknown-device";
+        }
 
-        if (!Files.exists(attendanceFile) || !Files.exists(scoresFile)) {
-            throw new RuntimeException("Import failed: missing attendance_export.csv or scores_export.csv in " + importPath + ".");
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+
+        Path attendancePath = Path.of(importPath, "attendance_export.csv");
+        Path scoresPath = Path.of(importPath, "scores_export.csv");
+
+        if (!Files.exists(attendancePath) || !Files.exists(scoresPath)) {
+            syncLogDAO.create(deviceId, timestamp, 0, "FAILED");
+            throw new RuntimeException("Import failed: missing attendance_export.csv or scores_export.csv at " + importPath);
         }
 
         try {
-            int importedAttendance = importAttendance(attendanceFile);
-            int importedScores = importScores(scoresFile);
+            int attendanceInserted = importAttendance(attendancePath);
+            int scoresInserted = importScores(scoresPath);
 
-            System.out.println("Imported " + importedAttendance + " attendance records and "
-                    + importedScores + " score records from " + directory.toAbsolutePath() + ".");
-        } catch (IOException exception) {
-            throw new RuntimeException("Import failed for path " + importPath + ".", exception);
+            int totalInserted = attendanceInserted + scoresInserted;
+            syncLogDAO.create(deviceId, timestamp, totalInserted, "SUCCESS");
+
+        } catch (Exception exception) {
+            syncLogDAO.create(deviceId, timestamp, 0, "FAILED");
+            throw new RuntimeException("Import failed.", exception);
         }
     }
 
     private int importAttendance(Path filePath) throws IOException {
         int insertedCount = 0;
 
-        try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
-            if (reader.readLine() == null) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath.toFile()))) {
+            String headerLine = reader.readLine();
+            if (headerLine == null) {
                 return 0;
             }
 
             String line;
             while ((line = reader.readLine()) != null) {
-                if (line.isBlank()) {
-                    continue;
-                }
-
-                String[] fields = line.split(",", -1);
+                String[] fields = line.split(",");
                 if (fields.length < 4) {
                     continue;
                 }
 
-                int pupilId = Integer.parseInt(fields[1].trim());
-                LocalDate date = LocalDate.parse(fields[2].trim());
-                String status = fields[3].trim();
+                int pupilId = Integer.parseInt(fields[1]);
+                LocalDate date = LocalDate.parse(fields[2]);
+                String status = fields[3];
 
-                if (attendanceDAO.findByPupilAndDateRange(pupilId, date, date).isEmpty()) {
+                List<AttendanceRecord> existing = attendanceDAO.findByPupilAndDateRange(pupilId, date, date);
+                if (existing.isEmpty()) {
                     AttendanceRecord record = new AttendanceRecord();
                     record.setPupilId(pupilId);
                     record.setDate(date);
@@ -84,32 +106,30 @@ public class SyncImporter {
     private int importScores(Path filePath) throws IOException {
         int insertedCount = 0;
 
-        try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
-            if (reader.readLine() == null) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath.toFile()))) {
+            String headerLine = reader.readLine();
+            if (headerLine == null) {
                 return 0;
             }
 
             String line;
             while ((line = reader.readLine()) != null) {
-                if (line.isBlank()) {
-                    continue;
-                }
-
-                String[] fields = line.split(",", -1);
+                String[] fields = line.split(",");
                 if (fields.length < 9) {
                     continue;
                 }
 
-                int pupilId = Integer.parseInt(fields[1].trim());
-                int subjectId = Integer.parseInt(fields[2].trim());
-                String session = fields[3].trim();
-                String term = fields[4].trim();
-                double testScore = Double.parseDouble(fields[5].trim());
-                double examScore = Double.parseDouble(fields[6].trim());
-                double finalScore = Double.parseDouble(fields[7].trim());
-                String grade = fields[8].trim();
+                int pupilId = Integer.parseInt(fields[1]);
+                int subjectId = Integer.parseInt(fields[2]);
+                String session = fields[3];
+                String term = fields[4];
+                double testScore = Double.parseDouble(fields[5]);
+                double examScore = Double.parseDouble(fields[6]);
+                double finalScore = Double.parseDouble(fields[7]);
+                String grade = fields[8];
 
-                if (scoreDAO.findByPupilSubjectTerm(pupilId, subjectId, session, term) == null) {
+                Score existing = scoreDAO.findByPupilSubjectTerm(pupilId, subjectId, session, term);
+                if (existing == null) {
                     Score score = new Score();
                     score.setPupilId(pupilId);
                     score.setSubjectId(subjectId);
