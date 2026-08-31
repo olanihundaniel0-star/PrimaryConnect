@@ -34,6 +34,11 @@ public class AttendanceDAO {
             DELETE FROM attendance
             WHERE attendance_id = ?
             """;
+    private static final String FIND_ALL_SQL = """
+            SELECT attendance_id, pupil_id, date, status
+            FROM attendance
+            ORDER BY date, pupil_id
+            """;
 
     public AttendanceDAO() {
     }
@@ -93,6 +98,20 @@ public class AttendanceDAO {
             statement.executeUpdate();
         } catch (SQLException exception) {
             throw new RuntimeException("Failed to delete attendance record with ID " + attendanceId + ".", exception);
+        }
+    }
+
+    public List<AttendanceRecord> findAll() {
+        List<AttendanceRecord> records = new ArrayList<>();
+
+        try (PreparedStatement statement = getConnection().prepareStatement(FIND_ALL_SQL);
+             ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                records.add(mapAttendanceRecord(resultSet));
+            }
+            return records;
+        } catch (SQLException exception) {
+            throw new RuntimeException("Failed to retrieve all attendance records.", exception);
         }
     }
 
