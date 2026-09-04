@@ -31,12 +31,26 @@ CREATE TABLE subjects (
     name TEXT NOT NULL UNIQUE
 );
 
+CREATE TABLE academic_terms (
+    term_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL UNIQUE,
+    sort_order INTEGER NOT NULL UNIQUE
+);
+
+CREATE TABLE academic_sessions (
+    session_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT NOT NULL UNIQUE,
+    start_year INTEGER NOT NULL,
+    end_year INTEGER NOT NULL
+);
+
 CREATE TABLE topics (
     topic_id INTEGER PRIMARY KEY AUTOINCREMENT,
     subject_id INTEGER NOT NULL,
     class_level TEXT NOT NULL,
     title TEXT NOT NULL,
-    term TEXT NOT NULL,
+    term_id INTEGER NOT NULL,
     week INTEGER,
     learning_objectives TEXT,
     contents TEXT,
@@ -45,8 +59,9 @@ CREATE TABLE topics (
     teaching_materials TEXT,
     assessment TEXT,
     media_path TEXT,
-    UNIQUE (subject_id, class_level, term, title),
-    FOREIGN KEY (subject_id) REFERENCES subjects(subject_id)
+    UNIQUE (subject_id, class_level, term_id, title),
+    FOREIGN KEY (subject_id) REFERENCES subjects(subject_id),
+    FOREIGN KEY (term_id) REFERENCES academic_terms(term_id)
 );
 
 CREATE TABLE exercises (
@@ -63,15 +78,17 @@ CREATE TABLE scores (
     score_id INTEGER PRIMARY KEY AUTOINCREMENT,
     pupil_id INTEGER NOT NULL,
     subject_id INTEGER NOT NULL,
-    session TEXT NOT NULL,
-    term TEXT NOT NULL,
+    session_id INTEGER NOT NULL,
+    term_id INTEGER NOT NULL,
     test_score REAL,
     exam_score REAL,
     final_score REAL,
     grade TEXT CHECK (grade IN ('A', 'B', 'C', 'D', 'E', 'F')),
-    UNIQUE (pupil_id, subject_id, session, term),
+    UNIQUE (pupil_id, subject_id, session_id, term_id),
     FOREIGN KEY (pupil_id) REFERENCES pupils(pupil_id),
-    FOREIGN KEY (subject_id) REFERENCES subjects(subject_id)
+    FOREIGN KEY (subject_id) REFERENCES subjects(subject_id),
+    FOREIGN KEY (session_id) REFERENCES academic_sessions(session_id),
+    FOREIGN KEY (term_id) REFERENCES academic_terms(term_id)
 );
 
 CREATE TABLE attendance (

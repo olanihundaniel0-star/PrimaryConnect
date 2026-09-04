@@ -15,12 +15,12 @@ import java.util.List;
  */
 public class TopicDAO {
     private static final String TOPIC_COLUMNS = """
-            topic_id, subject_id, class_level, title, term, week, learning_objectives, contents,
+            topic_id, subject_id, class_level, title, academic_terms.display_name AS term, week, learning_objectives, contents,
             teacher_activities, learner_activities, teaching_materials, assessment, media_path
             """;
     private static final String INSERT_SQL = """
             INSERT INTO topics (
-                subject_id, class_level, title, term, week, learning_objectives, contents,
+                subject_id, class_level, title, term_id, week, learning_objectives, contents,
                 teacher_activities, learner_activities, teaching_materials, assessment, media_path
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -33,22 +33,28 @@ public class TopicDAO {
     private static final String FIND_BY_SUBJECT_CLASS_LEVEL_TERM_TITLE_SQL = """
             SELECT %s
             FROM topics
-            WHERE subject_id = ? AND class_level = ? AND term = ? AND title = ?
+            INNER JOIN academic_terms ON academic_terms.term_id = topics.term_id
+            WHERE subject_id = ? AND class_level = ? AND academic_terms.display_name = ? AND title = ?
             """.formatted(TOPIC_COLUMNS);
     private static final String FIND_BY_TITLE_SQL = """
             SELECT %s
             FROM topics
+            INNER JOIN academic_terms ON academic_terms.term_id = topics.term_id
             WHERE title = ?
             ORDER BY topic_id
             """.formatted(TOPIC_COLUMNS);
     private static final String FIND_BY_SUBJECT_CLASS_LEVEL_TERM_SQL = """
             SELECT %s
             FROM topics
-            WHERE subject_id = ? AND class_level = ? AND term = ?
+            INNER JOIN academic_terms ON academic_terms.term_id = topics.term_id
+            WHERE subject_id = ? AND class_level = ? AND academic_terms.display_name = ?
             ORDER BY week, title, topic_id
             """.formatted(TOPIC_COLUMNS);
 
+    private final AcademicTermDAO academicTermDAO;
+
     public TopicDAO() {
+        this.academicTermDAO = new AcademicTermDAO();
     }
 
     public int create(Topic topic) {
@@ -56,7 +62,7 @@ public class TopicDAO {
             statement.setInt(1, topic.getSubjectId());
             statement.setString(2, topic.getClassLevel());
             statement.setString(3, topic.getTitle());
-            statement.setString(4, topic.getTerm());
+            statement.setInt(4, academicTermDAO.findOrCreateByDisplayName(topic.getTerm()));
             setNullableInteger(statement, 5, topic.getWeek());
             statement.setString(6, topic.getLearningObjectives());
             statement.setString(7, topic.getContents());

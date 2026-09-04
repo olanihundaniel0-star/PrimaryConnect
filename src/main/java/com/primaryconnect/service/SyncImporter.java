@@ -4,6 +4,8 @@ import com.primaryconnect.data.AttendanceDAO;
 import com.primaryconnect.data.ScoreDAO;
 import com.primaryconnect.data.SyncLogDAO;
 import com.primaryconnect.model.AttendanceRecord;
+import com.primaryconnect.model.AcademicSession;
+import com.primaryconnect.model.AcademicTerm;
 import com.primaryconnect.model.Score;
 
 import java.io.BufferedReader;
@@ -121,20 +123,20 @@ public class SyncImporter {
 
                 int pupilId = Integer.parseInt(fields[1]);
                 int subjectId = Integer.parseInt(fields[2]);
-                String session = fields[3];
-                String term = fields[4];
+                AcademicSession session = AcademicSession.parse(fields[3]);
+                AcademicTerm term = AcademicTerm.fromLabel(fields[4]);
                 double testScore = Double.parseDouble(fields[5]);
                 double examScore = Double.parseDouble(fields[6]);
                 double finalScore = Double.parseDouble(fields[7]);
                 String grade = fields[8];
 
-                Score existing = scoreDAO.findByPupilSubjectTerm(pupilId, subjectId, session, term);
+                Score existing = scoreDAO.findByPupilSubjectTerm(pupilId, subjectId, session.toString(), term.getDisplayName());
                 if (existing == null) {
                     Score score = new Score();
                     score.setPupilId(pupilId);
                     score.setSubjectId(subjectId);
-                    score.setSession(session);
-                    score.setTerm(term);
+                    score.setSession(session.toString());
+                    score.setTerm(term.getDisplayName());
                     score.setTestScore(testScore);
                     score.setExamScore(examScore);
                     score.setFinalScore(finalScore);

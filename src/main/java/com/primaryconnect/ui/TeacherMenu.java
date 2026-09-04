@@ -4,6 +4,8 @@ import com.primaryconnect.data.PupilDAO;
 import com.primaryconnect.data.ScoreDAO;
 import com.primaryconnect.data.SubjectDAO;
 import com.primaryconnect.data.TopicDAO;
+import com.primaryconnect.model.AcademicSession;
+import com.primaryconnect.model.AcademicTerm;
 import com.primaryconnect.model.Pupil;
 import com.primaryconnect.model.Score;
 import com.primaryconnect.model.Subject;
@@ -11,6 +13,7 @@ import com.primaryconnect.model.Topic;
 import com.primaryconnect.service.AttendanceEngine;
 import com.primaryconnect.service.GradingEngine;
 import com.primaryconnect.service.MediaLauncher;
+import com.primaryconnect.util.AcademicPeriodPrompts;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -105,19 +108,21 @@ public class TeacherMenu {
         System.out.println("\n=== Enter Scores ===");
         Pupil pupil = selectPupil();
         Subject subject = selectSubject();
-        String session = readText("Enter session: ");
-        String term = readText("Enter term: ");
+        AcademicSession session = AcademicPeriodPrompts.promptForSession(scanner, "Enter academic session (YYYY/YYYY): ");
+        AcademicTerm term = AcademicPeriodPrompts.promptForTerm(scanner, "Select a term by number or name: ");
         double testScore = readDouble("Enter test score (0-40): ");
         double examScore = readDouble("Enter exam score (0-60): ");
 
         double finalScore = gradingEngine.computeTotal(testScore, examScore);
         String grade = gradingEngine.assignGrade(finalScore);
+        String sessionValue = session.toString();
+        String termValue = term.getDisplayName();
 
         Score existingScore = scoreDAO.findByPupilSubjectTerm(
                 pupil.getPupilId(),
                 subject.getSubjectId(),
-                session,
-                term
+                sessionValue,
+                termValue
         );
 
         if (existingScore == null) {
@@ -125,8 +130,8 @@ public class TeacherMenu {
                     0,
                     pupil.getPupilId(),
                     subject.getSubjectId(),
-                    session,
-                    term,
+                    sessionValue,
+                    termValue,
                     testScore,
                     examScore,
                     finalScore,
@@ -147,11 +152,12 @@ public class TeacherMenu {
     private void launchMediaLesson() {
         System.out.println("\n=== Launch Media Lesson ===");
         Subject subject = selectSubject();
-        String term = readText("Enter term: ");
-        List<Topic> topics = topicDAO.findBySubjectClassLevelTerm(subject.getSubjectId(), PRIMARY_FIVE, term);
+        AcademicTerm term = AcademicPeriodPrompts.promptForTerm(scanner, "Select a term by number or name: ");
+        String termValue = term.getDisplayName();
+        List<Topic> topics = topicDAO.findBySubjectClassLevelTerm(subject.getSubjectId(), PRIMARY_FIVE, termValue);
 
         if (topics.isEmpty()) {
-            System.out.println("No topics were found for " + subject.getName() + " in " + term + ".");
+            System.out.println("No topics were found for " + subject.getName() + " in " + termValue + ".");
             return;
         }
 

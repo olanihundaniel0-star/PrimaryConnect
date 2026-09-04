@@ -5,6 +5,8 @@ import com.primaryconnect.data.PupilDAO;
 import com.primaryconnect.data.ScoreDAO;
 import com.primaryconnect.data.SubjectDAO;
 import com.primaryconnect.data.TopicDAO;
+import com.primaryconnect.model.AcademicSession;
+import com.primaryconnect.model.AcademicTerm;
 import com.primaryconnect.model.Pupil;
 import com.primaryconnect.model.Score;
 import com.primaryconnect.model.Subject;
@@ -12,6 +14,7 @@ import com.primaryconnect.model.Topic;
 import com.primaryconnect.service.AttendanceEngine;
 import com.primaryconnect.service.ExerciseEngine;
 import com.primaryconnect.service.GradingEngine;
+import com.primaryconnect.util.AcademicPeriodPrompts;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -101,11 +104,12 @@ public class PupilMenu {
         }
 
         Subject subject = selectSubject();
-        String term = readText("Enter term: ");
-        List<Topic> topics = topicDAO.findBySubjectClassLevelTerm(subject.getSubjectId(), PRIMARY_FIVE, term);
+        AcademicTerm term = AcademicPeriodPrompts.promptForTerm(scanner, "Select a term by number or name: ");
+        String termValue = term.getDisplayName();
+        List<Topic> topics = topicDAO.findBySubjectClassLevelTerm(subject.getSubjectId(), PRIMARY_FIVE, termValue);
 
         if (topics.isEmpty()) {
-            System.out.println("No topics were found for " + subject.getName() + " in " + term + ".");
+            System.out.println("No topics were found for " + subject.getName() + " in " + termValue + ".");
             return;
         }
 
@@ -137,13 +141,15 @@ public class PupilMenu {
             return;
         }
 
-        String session = readText("Enter session: ");
-        String term = readText("Enter term: ");
+        AcademicSession session = AcademicPeriodPrompts.promptForSession(scanner, "Enter academic session (YYYY/YYYY): ");
+        AcademicTerm term = AcademicPeriodPrompts.promptForTerm(scanner, "Select a term by number or name: ");
+        String sessionValue = session.toString();
+        String termValue = term.getDisplayName();
         List<Score> scores = scoreDAO.findAllByPupil(pupilId);
         List<Score> scoresForSelectedTerm = new ArrayList<>();
 
         for (Score score : scores) {
-            if (term.equals(score.getTerm()) && session.equals(score.getSession())) {
+            if (termValue.equals(score.getTerm()) && sessionValue.equals(score.getSession())) {
                 scoresForSelectedTerm.add(score);
             }
         }
@@ -152,7 +158,7 @@ public class PupilMenu {
             gradingEngine.rankClass(scoresForSelectedTerm);
         }
 
-        System.out.println(gradingEngine.generatePupilReport(pupilId, scores, term, session));
+        System.out.println(gradingEngine.generatePupilReport(pupilId, scores, termValue, sessionValue));
     }
 
     private void logout() {

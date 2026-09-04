@@ -3,11 +3,15 @@ package com.primaryconnect.util;
 import com.primaryconnect.data.AttendanceDAO;
 import com.primaryconnect.data.ExerciseDAO;
 import com.primaryconnect.data.PupilDAO;
+import com.primaryconnect.data.ScoreDAO;
 import com.primaryconnect.data.SubjectDAO;
 import com.primaryconnect.data.TopicDAO;
+import com.primaryconnect.model.AcademicSession;
+import com.primaryconnect.model.AcademicTerm;
 import com.primaryconnect.model.AttendanceRecord;
 import com.primaryconnect.model.Exercise;
 import com.primaryconnect.model.Pupil;
+import com.primaryconnect.model.Score;
 import com.primaryconnect.model.Topic;
 
 import org.apache.commons.csv.CSVFormat;
@@ -44,6 +48,7 @@ public final class SeedLoader {
     private static final String CURRICULUM_SEED_DIRECTORY = "seed/curriculum";
     private static final String EXERCISES_SEED = "seed/exercises_seed.csv";
     private static final String SAMPLE_RECORDS_SEED = "seed/sample_records_seed.csv";
+    private static final String SCORES_SEED = "seed/scores_seed.csv";
     private static final List<String> CURRICULUM_HEADERS = List.of(
             "class",
             "subject",
@@ -62,18 +67,20 @@ public final class SeedLoader {
     }
 
     public static void loadAll() {
-        // Some non-curriculum seed files are header-only placeholders waiting on content team data.
+        // Seed files are optional; missing files are skipped with warnings.
         PupilDAO pupilDAO = new PupilDAO();
         SubjectDAO subjectDAO = new SubjectDAO();
         TopicDAO topicDAO = new TopicDAO();
         ExerciseDAO exerciseDAO = new ExerciseDAO();
         AttendanceDAO attendanceDAO = new AttendanceDAO();
+        ScoreDAO scoreDAO = new ScoreDAO();
         Map<String, TopicLookup> loadedTopicsByTitle = new HashMap<>();
 
         loadPupils(pupilDAO);
         loadCurriculum(subjectDAO, topicDAO, loadedTopicsByTitle);
         loadExercises(topicDAO, exerciseDAO, loadedTopicsByTitle);
         loadAttendance(pupilDAO, attendanceDAO);
+        loadScores(pupilDAO, subjectDAO, scoreDAO);
     }
 
     private static void loadPupils(PupilDAO pupilDAO) {
@@ -152,7 +159,14 @@ public final class SeedLoader {
     ) {
         String classLevel = record.get("class");
         String subject = record.get("subject");
-        String term = record.get("term");
+        AcademicTerm academicTerm;
+        try {
+            academicTerm = AcademicTerm.fromLabel(record.get("term"));
+        } catch (IllegalArgumentException exception) {
+            warnSkippingCurriculumRecord(resourceName, record, exception.getMessage());
+            return;
+        }
+        String term = academicTerm.getDisplayName();
         String title = record.get("topic");
 
         if (classLevel.isBlank() || subject.isBlank() || term.isBlank() || title.isBlank()) {
@@ -242,6 +256,85 @@ public final class SeedLoader {
             }
 
             attendanceDAO.create(new AttendanceRecord(0, pupilId, date, row[2]));
+        });
+    }
+
+    private static void loadScores(PupilDAO pupilDAO, SubjectDAO subjectDAO, ScoreDAO scoreDAO) {
+        readSeedRows(SCORES_SEED, row -> {
+            if (row.length < 8) {
+                warnSkippingRow(
+                        SCORES_SEED,
+                        row,
+                        "expected columns: pupil_id,subject,session,term,test_score,exam_score,final_score,grade"
+                );
+                return;
+            }
+
+            int pupilId;
+            try {
+                pupilId = Integer.parseInt(row[0]);
+            } catch (NumberFormatException exception) {
+                warnSkippingRow(SCORES_SEED, row, "pupil_id is not a valid integer");
+                return;
+            }
+
+            if (pupilDAO.findById(pupilId) == null) {
+                LOGGER.warning("Skipping score seed row because pupil ID was not found: " + pupilId + ".");
+                return;
+            }
+
+            String subjectName = row[1];
+            if (subjectName.isBlank()) {
+                warnSkippingRow(SCORES_SEED, row, "subject is required");
+                return;
+            }
+
+            AcademicSession session;
+            try {
+                session = AcademicSession.parse(row[2]);
+            } catch (IllegalArgumentException exception) {
+                warnSkippingRow(SCORES_SEED, row, exception.getMessage());
+                return;
+            }
+
+            AcademicTerm term;
+            try {
+                term = AcademicTerm.fromLabel(row[3]);
+            } catch (IllegalArgumentException exception) {
+                warnSkippingRow(SCORES_SEED, row, exception.getMessage());
+                return;
+            }
+
+            double testScore;
+            double examScore;
+            double finalScore;
+            try {
+                testScore = Double.parseDouble(row[4]);
+                examScore = Double.parseDouble(row[5]);
+                finalScore = Double.parseDouble(row[6]);
+            } catch (NumberFormatException exception) {
+                warnSkippingRow(SCORES_SEED, row, "test_score, exam_score, or final_score is not numeric");
+                return;
+            }
+
+            String grade = row[7];
+            if (grade.isBlank()) {
+                warnSkippingRow(SCORES_SEED, row, "grade is required");
+                return;
+            }
+
+            int subjectId = subjectDAO.findOrCreateByName(subjectName);
+            scoreDAO.create(new Score(
+                    0,
+                    pupilId,
+                    subjectId,
+                    session.toString(),
+                    term.getDisplayName(),
+                    testScore,
+                    examScore,
+                    finalScore,
+                    grade
+            ));
         });
     }
 

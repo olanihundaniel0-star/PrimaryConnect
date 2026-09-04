@@ -6,10 +6,13 @@ import com.primaryconnect.data.SubjectDAO;
 import com.primaryconnect.model.Pupil;
 import com.primaryconnect.model.Score;
 import com.primaryconnect.model.Subject;
+import com.primaryconnect.model.AcademicSession;
+import com.primaryconnect.model.AcademicTerm;
 import com.primaryconnect.service.AttendanceEngine;
 import com.primaryconnect.service.GradingEngine;
 import com.primaryconnect.service.SyncExporter;
 import com.primaryconnect.service.SyncImporter;
+import com.primaryconnect.util.AcademicPeriodPrompts;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -117,16 +120,18 @@ public class ProprietorMenu {
 
         printSubjects(subjects);
         Subject selectedSubject = selectSubject(subjects);
-        String session = readText("Enter session: ");
-        String term = readText("Enter term: ");
+        AcademicSession session = AcademicPeriodPrompts.promptForSession(scanner, "Enter academic session (YYYY/YYYY): ");
+        AcademicTerm term = AcademicPeriodPrompts.promptForTerm(scanner, "Select a term by number or name: ");
+        String sessionValue = session.toString();
+        String termValue = term.getDisplayName();
 
         List<Score> scores = new ArrayList<>();
         for (Pupil pupil : pupilDAO.findByClassLevel(PRIMARY_FIVE)) {
             Score score = scoreDAO.findByPupilSubjectTerm(
                     pupil.getPupilId(),
                     selectedSubject.getSubjectId(),
-                    session,
-                    term
+                    sessionValue,
+                    termValue
             );
             if (score != null) {
                 scores.add(score);
@@ -134,7 +139,7 @@ public class ProprietorMenu {
         }
 
         if (scores.isEmpty()) {
-            System.out.println("No scores were found for " + selectedSubject.getName() + " in " + term + ", " + session + ".");
+            System.out.println("No scores were found for " + selectedSubject.getName() + " in " + termValue + ", " + sessionValue + ".");
             return;
         }
 
@@ -143,8 +148,8 @@ public class ProprietorMenu {
         System.out.println();
         System.out.println("Subject: " + selectedSubject.getName());
         System.out.println("Class: " + PRIMARY_FIVE);
-        System.out.println("Session: " + session);
-        System.out.println("Term: " + term);
+        System.out.println("Session: " + sessionValue);
+        System.out.println("Term: " + termValue);
         System.out.printf(Locale.ROOT, "%-12s %-12s %-12s %-12s%n", "Pupil ID", "Test", "Exam", "Rank");
         for (Score score : scores) {
             System.out.printf(

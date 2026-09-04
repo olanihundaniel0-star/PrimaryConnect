@@ -15,23 +15,33 @@ import java.util.List;
  */
 public class ScoreDAO {
     private static final String INSERT_SQL = """
-            INSERT INTO scores (pupil_id, subject_id, session, term, test_score, exam_score, final_score, grade)
+            INSERT INTO scores (pupil_id, subject_id, session_id, term_id, test_score, exam_score, final_score, grade)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String FIND_BY_PUPIL_SUBJECT_TERM_SQL = """
-            SELECT score_id, pupil_id, subject_id, session, term, test_score, exam_score, final_score, grade
+            SELECT score_id, pupil_id, subject_id,
+                   academic_sessions.label AS session,
+                   academic_terms.display_name AS term,
+                   test_score, exam_score, final_score, grade
             FROM scores
-            WHERE pupil_id = ? AND subject_id = ? AND session = ? AND term = ?
+            INNER JOIN academic_sessions ON academic_sessions.session_id = scores.session_id
+            INNER JOIN academic_terms ON academic_terms.term_id = scores.term_id
+            WHERE pupil_id = ? AND subject_id = ? AND academic_sessions.label = ? AND academic_terms.display_name = ?
             """;
     private static final String FIND_ALL_BY_PUPIL_SQL = """
-            SELECT score_id, pupil_id, subject_id, session, term, test_score, exam_score, final_score, grade
+            SELECT score_id, pupil_id, subject_id,
+                   academic_sessions.label AS session,
+                   academic_terms.display_name AS term,
+                   test_score, exam_score, final_score, grade
             FROM scores
+            INNER JOIN academic_sessions ON academic_sessions.session_id = scores.session_id
+            INNER JOIN academic_terms ON academic_terms.term_id = scores.term_id
             WHERE pupil_id = ?
-            ORDER BY session, term, subject_id
+            ORDER BY academic_sessions.label, academic_terms.display_name, subject_id
             """;
     private static final String UPDATE_SQL = """
             UPDATE scores
-            SET pupil_id = ?, subject_id = ?, session = ?, term = ?, test_score = ?, exam_score = ?, final_score = ?, grade = ?
+            SET pupil_id = ?, subject_id = ?, session_id = ?, term_id = ?, test_score = ?, exam_score = ?, final_score = ?, grade = ?
             WHERE score_id = ?
             """;
     private static final String DELETE_SQL = """
@@ -39,20 +49,30 @@ public class ScoreDAO {
             WHERE score_id = ?
             """;
     private static final String FIND_ALL_SQL = """
-            SELECT score_id, pupil_id, subject_id, session, term, test_score, exam_score, final_score, grade
+            SELECT score_id, pupil_id, subject_id,
+                   academic_sessions.label AS session,
+                   academic_terms.display_name AS term,
+                   test_score, exam_score, final_score, grade
             FROM scores
-            ORDER BY session, term, pupil_id, subject_id
+            INNER JOIN academic_sessions ON academic_sessions.session_id = scores.session_id
+            INNER JOIN academic_terms ON academic_terms.term_id = scores.term_id
+            ORDER BY academic_sessions.label, academic_terms.display_name, pupil_id, subject_id
             """;
 
+    private final AcademicSessionDAO academicSessionDAO;
+    private final AcademicTermDAO academicTermDAO;
+
     public ScoreDAO() {
+        this.academicSessionDAO = new AcademicSessionDAO();
+        this.academicTermDAO = new AcademicTermDAO();
     }
 
     public int create(Score score) {
         try (PreparedStatement statement = getConnection().prepareStatement(INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
             statement.setInt(1, score.getPupilId());
             statement.setInt(2, score.getSubjectId());
-            statement.setString(3, score.getSession());
-            statement.setString(4, score.getTerm());
+            statement.setInt(3, academicSessionDAO.findOrCreateByLabel(score.getSession()));
+            statement.setInt(4, academicTermDAO.findOrCreateByDisplayName(score.getTerm()));
             statement.setDouble(5, score.getTestScore());
             statement.setDouble(6, score.getExamScore());
             statement.setDouble(7, score.getFinalScore());
@@ -110,8 +130,8 @@ public class ScoreDAO {
         try (PreparedStatement statement = getConnection().prepareStatement(UPDATE_SQL)) {
             statement.setInt(1, score.getPupilId());
             statement.setInt(2, score.getSubjectId());
-            statement.setString(3, score.getSession());
-            statement.setString(4, score.getTerm());
+            statement.setInt(3, academicSessionDAO.findOrCreateByLabel(score.getSession()));
+            statement.setInt(4, academicTermDAO.findOrCreateByDisplayName(score.getTerm()));
             statement.setDouble(5, score.getTestScore());
             statement.setDouble(6, score.getExamScore());
             statement.setDouble(7, score.getFinalScore());
