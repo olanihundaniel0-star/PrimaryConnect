@@ -168,7 +168,9 @@ public class TeacherMenu {
             return;
         }
 
-        mediaLauncher.launch(topic.getMediaPath());
+        if (!mediaLauncher.launch(subject.getName(), topic.getMediaPath())) {
+            System.out.println("Unable to launch media lesson: " + topic.getMediaPath());
+        }
     }
 
     private void logout() {

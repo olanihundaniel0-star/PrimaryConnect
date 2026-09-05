@@ -12,34 +12,44 @@ public class MediaLauncher {
     }
 
     public boolean isLaunchable(String mediaPath) {
-        File mediaFile = new File(mediaPath);
-        if (!mediaFile.exists()) {
+        return isLaunchable(null, mediaPath);
+    }
+
+    public boolean isLaunchable(String subjectHint, String mediaPath) {
+        File mediaFile = toMediaFile(subjectHint, mediaPath);
+        if (mediaFile == null || !mediaFile.exists()) {
             return false;
         }
 
         return isDesktopOpenSupported();
     }
 
-    public void launch(String mediaPath) {
-        File mediaFile = new File(mediaPath);
-        if (!mediaFile.exists()) {
+    public boolean launch(String mediaPath) {
+        return launch(null, mediaPath);
+    }
+
+    public boolean launch(String subjectHint, String mediaPath) {
+        File mediaFile = toMediaFile(subjectHint, mediaPath);
+        if (mediaFile == null || !mediaFile.exists()) {
             System.out.println("Media file not found: " + mediaPath);
-            return;
+            return false;
         }
 
         if (!isDesktopOpenSupported()) {
             System.out.println("Desktop launching not supported on this system");
-            return;
+            return false;
         }
 
         try {
-            Desktop.getDesktop().open(mediaFile);
-        } catch (IOException exception) {
+            openMedia(mediaFile);
+            return true;
+        } catch (IOException | RuntimeException exception) {
             System.out.println("Unable to open media file: " + mediaPath);
+            return false;
         }
     }
 
-    private boolean isDesktopOpenSupported() {
+    protected boolean isDesktopOpenSupported() {
         try {
             if (!Desktop.isDesktopSupported()) {
                 return false;
@@ -49,5 +59,18 @@ public class MediaLauncher {
         } catch (Throwable exception) {
             return false;
         }
+    }
+
+    protected void openMedia(File mediaFile) throws IOException {
+        Desktop.getDesktop().open(mediaFile);
+    }
+
+    private File toMediaFile(String subjectHint, String mediaPath) {
+        String resolvedMediaPath = MediaPathResolver.resolve(subjectHint, mediaPath);
+        if (resolvedMediaPath == null || resolvedMediaPath.isBlank()) {
+            return null;
+        }
+
+        return new File(resolvedMediaPath);
     }
 }

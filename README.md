@@ -9,6 +9,7 @@ PrimaryConnect is an offline, console-based school management system for a Niger
 - Attendance tracking rolled up daily → weekly → monthly → termly → session
 - End-of-term grading using the 40% test + 60% exam formula, A–F grade assignment, class ranking, and plain-text reporting
 - Media playback through the Java Desktop API
+- A JavaFX dashboard that uses the repository mockup palette for a cleaner visual entry point
 - Optional Yoruba, Igbo, and Hausa prompts at login, navigation, and exercise feedback only; this is not a full UI translation layer
 - Two-device data sync through USB export/import with duplicate detection; there is no network layer, and each laptop operates as an independent instance
 
@@ -83,6 +84,7 @@ All pull requests require review before merging.
 2. Run `mvn install` from the project root to compile the application and run the test stubs.
 3. Load the SQL schema and seed CSVs from the resources folder into the local SQLite database before first use.
 4. Run the entry point with `mvn exec:java -Dexec.mainClass=com.primaryconnect.Main` or by launching Main from the IDE.
+5. Run the JavaFX dashboard with `mvn javafx:run -Djavafx.mainClass=com.primaryconnect.ui.DashboardApp`.
 
 ## Team
 

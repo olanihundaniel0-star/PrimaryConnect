@@ -3,47 +3,94 @@ package com.primaryconnect.service;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.awt.Desktop;
-import java.awt.GraphicsEnvironment;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MediaLauncherTest {
-    private final MediaLauncher mediaLauncher = new MediaLauncher();
-
     @Test
     void isLaunchableReturnsFalseForMissingFile() {
+        MediaLauncher mediaLauncher = new MediaLauncher();
         Path missingFile = Path.of("this-file-should-not-exist-" + System.nanoTime() + ".mp4");
 
         assertFalse(mediaLauncher.isLaunchable(missingFile.toString()));
     }
 
     @Test
-    void isLaunchableMatchesCurrentDesktopCapabilityForExistingFile(@TempDir Path tempDir) throws Exception {
-        Path mediaFile = Files.createTempFile(tempDir, "media-", ".txt");
+    void isLaunchableReturnsFalseForBlankPath() {
+        MediaLauncher mediaLauncher = new MediaLauncher();
 
-        assertEquals(expectedLaunchable(mediaFile), mediaLauncher.isLaunchable(mediaFile.toString()));
+        assertFalse(mediaLauncher.isLaunchable("   "));
     }
 
-    private boolean expectedLaunchable(Path mediaFile) {
-        if (!Files.exists(mediaFile)) {
-            return false;
+    @Test
+    void launchReturnsFalseForMissingFile() {
+        MediaLauncher mediaLauncher = new MediaLauncher();
+        Path missingFile = Path.of("this-file-should-not-exist-" + System.nanoTime() + ".mp4");
+
+        assertFalse(mediaLauncher.launch(missingFile.toString()));
+    }
+
+    @Test
+    void launchReturnsTrueWhenDesktopLaunchSucceeds(@TempDir Path tempDir) throws Exception {
+        Path mediaFile = Files.createTempFile(tempDir, "media-", ".txt");
+        MediaLauncher mediaLauncher = new SuccessfulMediaLauncher();
+
+        assertTrue(mediaLauncher.launch(mediaFile.toString()));
+    }
+
+    @Test
+    void launchFallsBackToBundledDemoMediaWhenOriginalPathIsMissing() {
+        MediaLauncher mediaLauncher = new SuccessfulMediaLauncher();
+
+        assertTrue(mediaLauncher.launch("Basic Science", "/home/daniel/projects/primaryconnectmedia/missing-video.mp4"));
+    }
+
+    @Test
+    void launchReturnsFalseWhenDesktopLaunchIsNotSupported(@TempDir Path tempDir) throws Exception {
+        Path mediaFile = Files.createTempFile(tempDir, "media-", ".txt");
+        MediaLauncher mediaLauncher = new UnsupportedMediaLauncher();
+
+        assertFalse(mediaLauncher.launch(mediaFile.toString()));
+    }
+
+    @Test
+    void isLaunchableReturnsTrueWhenDesktopLaunchIsSupported(@TempDir Path tempDir) throws Exception {
+        Path mediaFile = Files.createTempFile(tempDir, "media-", ".txt");
+        MediaLauncher mediaLauncher = new SupportedMediaLauncher();
+
+        assertTrue(mediaLauncher.isLaunchable(mediaFile.toString()));
+    }
+
+    private static class SupportedMediaLauncher extends MediaLauncher {
+        @Override
+        protected boolean isDesktopOpenSupported() {
+            return true;
         }
 
-        if (GraphicsEnvironment.isHeadless()) {
-            return false;
+        @Override
+        protected void openMedia(java.io.File mediaFile) {
+            // no-op for the test
+        }
+    }
+
+    private static class SuccessfulMediaLauncher extends MediaLauncher {
+        @Override
+        protected boolean isDesktopOpenSupported() {
+            return true;
         }
 
-        try {
-            if (!Desktop.isDesktopSupported()) {
-                return false;
-            }
+        @Override
+        protected void openMedia(java.io.File mediaFile) {
+            // no-op for the test
+        }
+    }
 
-            return Desktop.getDesktop().isSupported(Desktop.Action.OPEN);
-        } catch (Throwable exception) {
+    private static class UnsupportedMediaLauncher extends MediaLauncher {
+        @Override
+        protected boolean isDesktopOpenSupported() {
             return false;
         }
     }
